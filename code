@@ -1,0 +1,304 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import csv
+import numpy as np
+
+import warnings
+warnings.filterwarnings("ignore")
+
+# parse the excel file as a pandas dataframe
+df_input_csv = input('Please input the your results in the form of a csv file: ')
+df = pd.read_csv(df_input_csv)
+# print(df)
+
+# print the first five rows
+# print(df.head())
+
+# drop all of the columns except for the well position, sample name, target name, and ct
+df.drop(df.columns.difference(['Well Position','Sample Name','Target Name', 'CT']), 1, inplace=True)
+
+# print the first five rows of the modified dataframe
+df = df.sort_values(by = ['Sample Name', 'Well Position'])
+df = df.reset_index()
+df = df.drop(columns = ['index'])
+df = df[df.CT != 'Undetermined']
+# print(df)
+
+# take the input of the housekeeping gene and save it to a variable
+housekeeping_gene = input('Please input the housekeeping gene:')
+
+# clean the input
+housekeeping_gene = housekeeping_gene.upper()
+housekeeping_gene.strip()
+
+# create a subset of the dataframe with the target name == housekeeping gene
+controlgene_df = df[df['Target Name'] == housekeeping_gene]
+
+# print the control gene subset
+# print(controlgene_df)
+
+# get the unqiue sample names from the dataset
+unique_samples = df["Sample Name"].unique()
+
+# print the unique sample names
+# print(unique_samples)
+
+# create an empty list to store the averages of the housekeeping gene averages
+average_list = []
+for value in unique_samples: # iterate through the unique sample values 
+    # for sample in controlgene_df['Sample Name']: # iterate through the unique sample names
+    subset = controlgene_df[controlgene_df['Sample Name'] == value] # create a subset of the controlgene_df with identical sample names
+    list_item = subset['CT'].astype(float).mean() # take the mean of the CT column of this subset
+    average_list.append(list_item) # append the mean to our average list
+    
+# print average_list
+# print(average_list)
+
+# assign each of the unique samples to its corresponding average
+average_dict = {unique_samples[i]: average_list[i] for i in range(len(unique_samples))}
+
+# print average_dict
+# print(average_dict)
+
+# create a subset of the original dataframe with all targets besides the housekeeping gene
+all_target_subset = df[df['Target Name'] != housekeeping_gene]
+
+# create a list of the unique targets by taking the target name column from the target subset
+unique_targets = all_target_subset["Target Name"].unique().tolist()
+
+# print unique targets
+# print(unique_targets)
+
+# create an empty list to create target-based subsets of the target_subset
+target_list = []
+for target in unique_targets: # iterate through the unique targets
+    target_list.append(df[df['Target Name'] == target]) # append target-based subsets to the list target_list
+
+# print target_list
+# print(target_list)
+
+# create a new list that will eventually serve as a column for our target subsets
+tobecolumn = []
+for subset in target_list: # iterate through the subsets in target_list 
+    for sample in subset['Sample Name']: # iterate through the targets in the target name column
+        for sample_name, sample_average in average_dict.items(): # iterate through the items in the average_dict dictionary
+            if str(sample_name) == sample: # self explanatory :)
+                tobecolumn.append(sample_average) # append the average to a list
+    subset['Corresponding Average'] = tobecolumn # add the list to the subset as a column
+    tobecolumn = [] # refresh the list for the next subset
+
+# print the updated dataset
+# print(target_list)
+
+# create a new list to save the first delta value
+delta_list = []
+for subset in target_list: # iterate through the target-based subsets
+    i1 = 0 # iteration variable one
+    i2 = 0 # iteration variable two
+    for target in subset['Target Name']: # iterate through the target name column
+        target_value = list(subset['CT']) # create a list of the CT column
+        average = list(subset['Corresponding Average']) # create a list of the averages column
+        delta_variable = float(target_value[i1]) - float(average[i2]) # create a variable that is the product of the subtraction
+        delta_list.append(delta_variable) # append the variable to a temporary column list
+        i1 = i1 + 1 # add to the iteration variable
+        i2 = i2 + 1 # add to the iteration variable
+    subset['Delta'] = delta_list # append the list to the subset as a column
+    delta_list = [] # refresh the temporary column list
+
+# print updated target_list
+# print(target_list)
+
+# input the different conditions of the cell lines/samples
+conditions = input('Please input the different conditions of the samples (ex. NTC, ZBTB20...): ')
+
+# clean the input
+conditions = conditions.upper()
+conditions = conditions.split(",")
+conditions_cleaned = []
+for item in conditions:
+    cleaned_variable = item.replace(' ','')
+    conditions_cleaned.append(cleaned_variable)
+
+# print the cleaned conditions
+# print(conditions_cleaned)
+
+# create a temporary column list for the conditions
+conditions_list = []
+for subset in target_list: # iterate through the subsets in target_list
+    for sample in subset['Sample Name']: # iterate through the sample names
+        for condition in conditions_cleaned: # iterate through the conditions list (from the input)
+            if str(condition) in str(sample): # self explanatory
+                conditions_list.append(condition) # append the condition if the sample name has that condition in it
+    subset['Condition'] = conditions_list # append the list to the subset as a column
+    conditions_list = [] # refresh the list
+
+# print the updated target_list
+# print(target_list)
+
+sample_no_condition_list = []
+for subset in target_list: # iterate through the subsets in target_list
+    for sample in subset['Sample Name']: # iterate through the sample names
+        for condition in conditions_cleaned: # iterate through the conditions list (from the input)
+            if str(condition) in str(sample): # self explanatory
+                sample_no_condition = str(sample).removesuffix(condition)
+                sample_no_condition_list.append(sample_no_condition) # append the condition if the sample name has that condition in it
+    subset['Cleaned Sample'] = sample_no_condition_list # append the list to the subset as a column
+    sample_no_condition_list = [] # refresh the list
+
+# print(target_list)
+
+# create a temporary column list
+super_subset_list = []
+master_super_subset_list = []
+for subset in target_list: # iterate through the subsets in target_list
+    for value in unique_samples: # iterate through the unique sample names in the list
+        for sample in subset['Sample Name'].unique(): # iterate through the unique sample names in the df
+            if sample == value: # self explanatory
+                super_subset_list.append(subset[subset['Sample Name'] == value]) # append a subset of all of the unique subsets (in groups of 3)
+    master_super_subset_list.append(super_subset_list) # append the super_subset_list to another list to separate the different subsets
+    super_subset_list = [] # refresh the super_subset_list
+
+# print Master_subset_list_cool
+# print(master_super_subset_list)
+
+# create a new list as a place holder for out several dictionaries
+master_subset_dictionary_list = []
+
+
+for sublist in master_super_subset_list: # iterate through the sublists in master_super_subset_list
+    dictionary_subset = {} # create a temporary dictionary 
+    for subset in sublist: # iterate through the subsets in sublist
+        dictionary_subset[str(subset['Sample Name'].unique()).strip('[').strip(']').strip("'").strip('"')] = subset # save the subset and its corresponding sample name to a dictionary
+    master_subset_dictionary_list.append(dictionary_subset) # append the temporary dictionary to a master list
+
+# print master_subset_dictionary_list
+# print(master_subset_dictionary_list)
+
+# input the condition of the control
+control_sample_condition = input('Please input the condition of the control sample (ex. NTC): ')
+
+# clean the control sample condition
+control_sample_condition = control_sample_condition.upper()
+control_sample_condition.strip()
+
+# print master_super_subset_list
+# print(master_super_subset_list)
+
+# create a new list for the non-ntc values
+no_ntc_master_super_subset_list = []
+
+# create a new list with only ntc values
+ntc_master_super_subset_list = []
+
+# create temporary lists for the loop
+non_new_super_subset_list = []
+with_new_super_subset_list = []
+
+# print(control_sample_condition)
+for sublist in master_super_subset_list: # iterate through the sublists in the master list
+    for subset in sublist: # iterate through the subsets in the sublist
+        for condition in subset['Condition'].unique(): # iterate through the conditions
+            if str(condition) != str(control_sample_condition): # self explanatory
+                non_new_super_subset_list.append(subset) # append non-ntc subsets
+            else:
+                with_new_super_subset_list.append(subset)
+    no_ntc_master_super_subset_list.append(non_new_super_subset_list) # append this sublist to the no_ntc master list
+    non_new_super_subset_list = [] # refresh the temporary subset list
+    ntc_master_super_subset_list.append(with_new_super_subset_list) # append this sublist to the no_ntc master list
+    with_new_super_subset_list = [] # refresh the temporary subset list
+
+# print(no_ntc_master_super_subset_list)
+# print(ntc_master_super_subset_list)
+
+# unique_no_condition_sample = []
+# for sublist in master_super_subset_list:
+#     for subset in sublist:
+#         for sample_cleaned in subset['Cleaned Sample'].unique():
+#             unique_no_condition_sample.append(sample_cleaned)
+
+# unique_no_condition_sample_set = set(unique_no_condition_sample)
+# unique_no_condition_sample = list(set(unique_no_condition_sample_set))
+
+# print(unique_no_condition_sample)
+
+# print no_ntc_master_super_subset_list
+# print(no_ntc_master_super_subset_list)
+
+# # print(ntc_master_super_subset_list)
+
+control_sample_delta = {}
+# # create a list with the control sample deltas (based on subset)
+control_sample_deltas_master = []
+
+for sublist in ntc_master_super_subset_list:
+    for subset in sublist:
+        for sample in subset['Sample Name'].unique():
+            for target in subset['Target Name'].unique():
+                if (str(sample) + ' ' + str(target)) not in control_sample_delta.keys():
+                    control_sample_delta = {}
+                    control_sample_delta[str(sample) + str(target)] = list(subset['Delta'])
+        control_sample_deltas_master.append(control_sample_delta)
+    
+
+# print(control_sample_deltas_master)
+# # print(control_sample_deltas_master)
+
+ntc_subtract = []
+for sublist in no_ntc_master_super_subset_list:
+    for subset in sublist:
+        for target in subset['Target Name']:
+            for sample_name in subset['Cleaned Sample'].unique():
+                for condition in subset['Condition'].unique():
+                    for list_dict in control_sample_deltas_master:
+                        for key, value in list_dict.items():
+                            if (str(sample_name) + control_sample_condition + str(target)) == key:
+                                ntc_subtract = list(value)
+        subset['NTC Subtract'] = ntc_subtract
+    ntc_subtract = []
+
+# print(no_ntc_master_super_subset_list)
+
+value_list= []
+for sublist in no_ntc_master_super_subset_list:
+    for subset in sublist:
+        value_list = subset['Delta'] - subset['NTC Subtract']
+        subset['Delta Delta'] = value_list
+        value_list = []
+
+for sublist in no_ntc_master_super_subset_list:
+    for subset in sublist:
+        for sample in subset['Sample Name']:
+            value = subset['Delta'] - subset['NTC Subtract']
+            subset['Delta Delta'] = value
+
+# print(no_ntc_master_super_subset_list)
+
+gene_expression_list = []
+
+for sublist in no_ntc_master_super_subset_list:
+    for subset in sublist:
+        for values in subset['Delta Delta']:
+            delta_modified = values * (-1)
+            delta_2_modified = 2 ** delta_modified
+            gene_expression_list.append(delta_2_modified)
+        subset['Gene Expression'] = gene_expression_list
+        gene_expression_list = []
+
+# print(no_ntc_master_super_subset_list)
+
+for sublist in no_ntc_master_super_subset_list:
+    for subset in sublist:
+        subset.drop(subset.columns.difference(['Sample Name','Target Name', 'CT', 'Gene Expression']), 1, inplace=True)
+
+# print(no_ntc_master_super_subset_list)
+
+analysis_result_list = []
+for sublist in no_ntc_master_super_subset_list:
+    analysis_result_list = analysis_result_list + sublist
+
+analysis_result_df = pd.concat(list(analysis_result_list), ignore_index = True)
+# print(analysis_result_df)
+
+csv_results_name = input('Please enter a csv file name that you would like to export your results to: ')
+analysis_result_df.to_csv(csv_results_name, index=False)
+print('Your results were exported sucessfully. Please check your current directory to see your file.')
